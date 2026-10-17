@@ -146,3 +146,25 @@ def test_interrupt_and_broken_pipe(monkeypatch,capsys):
             raise BrokenPipeError
     monkeypatch.setattr(sys,'stdout',Broken())
     assert main(['--dry-run','x']) == 1
+
+
+@pytest.mark.parametrize('stream',['stdout','stderr'])
+def test_real_closed_output_pipe_exits_cleanly(server,stream):
+    reader,writer = os.pipe()
+    os.close(reader)
+    args = ['--dry-run','x'] if stream == 'stdout' else [
+        '--endpoint',server.endpoint,'--preset','short','--show-steps','x']
+    try:
+        result = subprocess.run(
+            [sys.executable,'-m','convolute',*args],
+            stdout=writer if stream == 'stdout' else subprocess.PIPE,
+            stderr=writer if stream == 'stderr' else subprocess.PIPE,
+            timeout=10,
+        )
+    finally:
+        os.close(writer)
+    assert result.returncode == 1
+    captured = result.stderr if stream == 'stdout' else result.stdout
+    assert b'Traceback' not in captured
+    if stream == 'stderr':
+        assert result.stdout == b'' and len(server.requests) == 1

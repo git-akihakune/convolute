@@ -115,13 +115,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("convolute: interrupted", file=sys.stderr)
         return 130
     except BrokenPipeError:
-        # Prevent an additional interpreter-shutdown error for buffered stdout.
-        try:
-            descriptor = os.open(os.devnull, os.O_WRONLY)
+        # Silence whichever stream failed, so shutdown cannot override exit 1.
+        for stream in (sys.stdout, sys.stderr):
             try:
-                os.dup2(descriptor, sys.stdout.fileno())
-            finally:
-                os.close(descriptor)
-        except (OSError, ValueError, AttributeError):
-            pass
+                stream.flush()
+            except BrokenPipeError:
+                try:
+                    descriptor = os.open(os.devnull, os.O_WRONLY)
+                    try:
+                        os.dup2(descriptor, stream.fileno())
+                    finally:
+                        os.close(descriptor)
+                except (OSError, ValueError, AttributeError):
+                    pass
+            except (OSError, ValueError):
+                pass
         return 1

@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-17-convolute-design.md` (approved 2026-10-17).
 
-**Status:** Approved by the user on 2026-10-17; native implementation complete, awaiting final independent review.
+**Status:** Approved by the user on 2026-10-17; native implementation complete; independent review completed and its finding fixed.
 
 ## Global Constraints
 
@@ -105,8 +105,14 @@ Self-review completed: all approved spec sections map to the four tasks; all fiv
 
 ## Execution Verification
 
-- Automated suite: `python -m pytest -q` — 123 tests passed.
+- Automated suite: `python -m pytest -q` — 125 tests passed.
 - Built both sdist and wheel with `python -m build --no-isolation`.
 - Installed the wheel in a separate virtualenv; console help and isolated module dry-run succeeded with five default calls and faithful mode.
 - Verified wheel package files and GPL-3.0-only license metadata.
 - No live LLM endpoint was configured; paraphrase quality has not been measured.
+
+## Final Independent Review
+
+A fresh reviewer assessed the complete implementation against the approved design and review focus. One P2 issue was reproduced: a closed stderr pipe during `--show-steps` could cause Python shutdown to override exit 1 with exit 120. A real subprocess/pipe regression failed before the fix and passed after stream-specific shutdown handling was added. The full suite then passed all 125 tests, and the rebuilt wheel was reinstalled and smoke-tested. No other substantial findings or deferred minors were reported.
+
+Execution decisions: used the existing isolated managed cloud checkout on branch `work` rather than a nested worktree (cost if wrong: changes remain on that review branch); used manual ignored progress tracking because cloud skill helper scripts were unavailable (cost: manual bookkeeping); documented standard HTTP connect/read/write/pool timeout semantics rather than a whole-run deadline (cost: continuously arriving response bytes can keep a request alive beyond one read timeout interval).
