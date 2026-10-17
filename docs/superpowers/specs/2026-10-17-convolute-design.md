@@ -1,7 +1,7 @@
 # Convolute POC design
 
 Date: 2026-10-17
-Status: Design approved by the user on 2026-10-17; implementation has not started.
+Status: Design approved by the user on 2026-10-17; POC implemented and protocol-tested. Live model quality remains unverified.
 
 ## Intent and assumptions
 

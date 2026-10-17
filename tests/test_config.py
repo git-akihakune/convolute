@@ -78,3 +78,10 @@ def test_invalid_settings(field,value):
 def test_empty_environment_values_are_not_ignored(name):
     with pytest.raises(ValueError):
         resolve_settings(Namespace(),{name:' '})
+
+
+@pytest.mark.parametrize('key',['SECRET\nvalue','SECRET\x00value','SECRET你好',' SECRET '])
+def test_invalid_bearer_key_fails_safely_before_http(key):
+    with pytest.raises(ValueError) as error:
+        resolve_settings(Namespace(),{'CONVOLUTE_API_KEY':key})
+    assert 'SECRET' not in str(error.value)

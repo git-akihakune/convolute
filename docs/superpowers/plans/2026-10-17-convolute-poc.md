@@ -1,6 +1,6 @@
 # Convolute POC Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deliver an installable CLI that paraphrases text through configurable, sequential LLM translations, with a five-translation default and optional creative mode.
 
@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-17-convolute-design.md` (approved 2026-10-17).
 
-**Status:** Awaiting user review and execution-method selection. Recommended execution: native, in this session, because the four tasks share small, sequential interfaces.
+**Status:** Approved by the user on 2026-10-17; native implementation complete, awaiting final independent review.
 
 ## Global Constraints
 
@@ -57,11 +57,11 @@
 
 **Interfaces:** Produce `Settings`, `resolve_settings`, `normalize_endpoint`, and `resolve_chain` as defined above. Raise `ValueError` with safe messages for invalid configuration. The later parser supplies optional values as `None` so environment precedence is explicit.
 
-- [ ] After checking environment/network policy, create an isolated development virtualenv under `work/`, install pytest, httpx, build, and setuptools there, and use its Python for subsequent commands. During initial red tests use `PYTHONPATH=src python -m pytest ...`; after package metadata exists install `python -m pip install -e '.[test]'` so subsequent test commands resolve the package normally. Keep generated files ignored.
-- [ ] Write tests: `resolve_chain(None, None) == ('en','fr','de','ja','es','en')`; named presets have 2/5/9 hops; `resolve_chain(None, ' EN, CN, KR, JP, ID, EN ') == ('en','zh','ko','ja','id','en')`; reject conflicting selectors, unknown codes, empty entries, adjacent duplicates, and nonclosed/too-short chains.
-- [ ] Add endpoint/numeric/precedence tests: `127.0.0.1:11434` and `[::1]:11434` become loopback HTTP `/v1` bases; `https://host/custom/v1/` retains its base path without a trailing slash; origin-only URLs gain `/v1`; reject nonloopback schemeless hosts, invalid ports, userinfo, query, fragments, operation URLs, nonpositive repeats/timeouts, negative retries, nonfinite values, out-of-range temperature, blank models, and invalid modes. Assert CLI overrides environment for endpoint/model/mode; defaults apply otherwise; credentials never appear in repr/errors.
-- [ ] Run `python -m pytest tests/test_config.py -q`; confirm failures identify missing package/functions, then implement the smallest package/configuration code to satisfy these contracts. Define `requires-python = ">=3.11"`, runtime `httpx>=0.27,<1`, a test extra containing pytest, and the `convolute = "convolute.cli:main"` entry point.
-- [ ] Install the editable package and re-run `python -m pytest tests/test_config.py -q`; all tests must pass. Review normalization against the spec, then commit the task.
+- [x] After checking environment/network policy, create an isolated development virtualenv under `work/`, install pytest, httpx, build, and setuptools there, and use its Python for subsequent commands. During initial red tests use `PYTHONPATH=src python -m pytest ...`; after package metadata exists install `python -m pip install -e '.[test]'` so subsequent test commands resolve the package normally. Keep generated files ignored.
+- [x] Write tests: `resolve_chain(None, None) == ('en','fr','de','ja','es','en')`; named presets have 2/5/9 hops; `resolve_chain(None, ' EN, CN, KR, JP, ID, EN ') == ('en','zh','ko','ja','id','en')`; reject conflicting selectors, unknown codes, empty entries, adjacent duplicates, and nonclosed/too-short chains.
+- [x] Add endpoint/numeric/precedence tests: `127.0.0.1:11434` and `[::1]:11434` become loopback HTTP `/v1` bases; `https://host/custom/v1/` retains its base path without a trailing slash; origin-only URLs gain `/v1`; reject nonloopback schemeless hosts, invalid ports, userinfo, query, fragments, operation URLs, nonpositive repeats/timeouts, negative retries, nonfinite values, out-of-range temperature, blank models, and invalid modes. Assert CLI overrides environment for endpoint/model/mode; defaults apply otherwise; credentials never appear in repr/errors.
+- [x] Run `python -m pytest tests/test_config.py -q`; confirm failures identify missing package/functions, then implement the smallest package/configuration code to satisfy these contracts. Define `requires-python = ">=3.11"`, runtime `httpx>=0.27,<1`, a test extra containing pytest, and the `convolute = "convolute.cli:main"` entry point.
+- [x] Install the editable package and re-run `python -m pytest tests/test_config.py -q`; all tests must pass. Review normalization against the spec, then commit the task.
 
 ## Task 2: OpenAI-compatible translation client
 
@@ -69,10 +69,10 @@
 
 **Interfaces:** Consume `Settings`. Produce `TranslationError` and context-managed `TranslationClient.translate` as defined above. Inject a sleep callable/clock into retry helpers for fast deterministic tests; production defaults use monotonic timing, UTC dates, and normal sleep.
 
-- [ ] Write a local HTTP fixture that captures request path/headers/JSON and returns queued responses. Assert one POST to `/v1/chat/completions` or the preserved custom base path, correct model, `stream: false`, exactly system/user messages, unmodified Unicode user content, optional Bearer header, and temperature omitted unless supplied. In both modes assert target/source names and facts-preservation instructions; creative mode additionally requests freer expression. Successful content is returned without stripping quotes or markup.
-- [ ] Add failures: connection errors; HTTP `400/401/404/413/422/429/500/502/503/504`; redirect refusal; malformed JSON/schema; missing/empty/nonstring content; missing/non-stop finish reason; refusal/tool calls even with `stop`. Assert safe errors omit echoed bodies and credentials. Check zero retries by default; opted-in retry counts/backoff; bounded numeric/date Retry-After; malformed headers fall back to backoff; read/write timeouts and nonretryable responses fail immediately. Use injected/mock transports for connection/timeout classes that cannot be reliably induced by the local server.
-- [ ] Run `python -m pytest tests/test_client.py -q` and confirm missing-client failures, then implement requests with a persistent `httpx.Client`, verified TLS, redirects disabled, finite timeouts, a mode-specific system prompt, strict response validation, and retries only for connection failures or `429/502/503/504`. Cap exponential delay at 10 seconds and fail rather than shorten a valid Retry-After above 10 seconds. Use safe status/category messages, not raw response data.
-- [ ] Re-run configuration and client tests; all must pass. Review key handling and retry request counts, then commit the task.
+- [x] Write a local HTTP fixture that captures request path/headers/JSON and returns queued responses. Assert one POST to `/v1/chat/completions` or the preserved custom base path, correct model, `stream: false`, exactly system/user messages, unmodified Unicode user content, optional Bearer header, and temperature omitted unless supplied. In both modes assert target/source names and facts-preservation instructions; creative mode additionally requests freer expression. Successful content is returned without stripping quotes or markup.
+- [x] Add failures: connection errors; HTTP `400/401/404/413/422/429/500/502/503/504`; redirect refusal; malformed JSON/schema; missing/empty/nonstring content; missing/non-stop finish reason; refusal/tool calls even with `stop`. Assert safe errors omit echoed bodies and credentials. Check zero retries by default; opted-in retry counts/backoff; bounded numeric/date Retry-After; malformed headers fall back to backoff; read/write timeouts and nonretryable responses fail immediately. Use injected/mock transports for connection/timeout classes that cannot be reliably induced by the local server.
+- [x] Run `python -m pytest tests/test_client.py -q` and confirm missing-client failures, then implement requests with a persistent `httpx.Client`, verified TLS, redirects disabled, finite timeouts, a mode-specific system prompt, strict response validation, and retries only for connection failures or `429/502/503/504`. Cap exponential delay at 10 seconds and fail rather than shorten a valid Retry-After above 10 seconds. Use safe status/category messages, not raw response data.
+- [x] Re-run configuration and client tests; all must pass. Review key handling and retry request counts, then commit the task.
 
 ## Task 3: Ordered translation execution and run records
 
@@ -80,10 +80,10 @@
 
 **Interfaces:** Consume `Settings`, a translate callable, and `TranslationError`. Produce `Step`, `RunResult`, and `run` as defined above; each completed step triggers `on_step` if supplied. Translation failures produce an error result; interruptions propagate to the CLI.
 
-- [ ] Write a recording translator test: for chain `en,fr,en`, repeat `2`, assert pairs `[('en','fr'),('fr','en'),('en','fr'),('fr','en')]`, each next input equals the previous output, four steps have correct pass/local-step numbers, and final output equals the fourth result. Assert the default produces five calls and both modes preserve the selected chain. Successful results include schema version, original input, public settings, steps, and nonnegative durations without credentials.
-- [ ] Write a translator failing on call three; assert exactly three calls, two completed steps, `status == 'error'`, `output is None`, and the failing pair/pass/step in the error record. Assert step callbacks run only for completed hops. Assert `KeyboardInterrupt` propagates and does not become a translation error. Test multiline input and quoted output without destructive cleanup.
-- [ ] Run `python -m pytest tests/test_pipeline.py -q` and confirm missing-pipeline failures; implement the sequential loops with monotonic per-hop durations, explicit public serialization, and immediate termination on `TranslationError`.
-- [ ] Run all tests through this task; all must pass. Review repeat boundaries and partial-result serialization, then commit the task.
+- [x] Write a recording translator test: for chain `en,fr,en`, repeat `2`, assert pairs `[('en','fr'),('fr','en'),('en','fr'),('fr','en')]`, each next input equals the previous output, four steps have correct pass/local-step numbers, and final output equals the fourth result. Assert the default produces five calls and both modes preserve the selected chain. Successful results include schema version, original input, public settings, steps, and nonnegative durations without credentials.
+- [x] Write a translator failing on call three; assert exactly three calls, two completed steps, `status == 'error'`, `output is None`, and the failing pair/pass/step in the error record. Assert step callbacks run only for completed hops. Assert `KeyboardInterrupt` propagates and does not become a translation error. Test multiline input and quoted output without destructive cleanup.
+- [x] Run `python -m pytest tests/test_pipeline.py -q` and confirm missing-pipeline failures; implement the sequential loops with monotonic per-hop durations, explicit public serialization, and immediate termination on `TranslationError`.
+- [x] Run all tests through this task; all must pass. Review repeat boundaries and partial-result serialization, then commit the task.
 
 ## Task 4: CLI, documentation, and installable distribution
 
@@ -91,14 +91,22 @@
 
 **Interfaces:** Consume `resolve_settings`, `TranslationClient`, and `run`. Produce the console and module entry points. `main` reads standard streams, returns exit codes, and leaves raising `SystemExit` to the entry-point wrapper.
 
-- [ ] Write CLI tests for positional/file/stdin selection, `--file -`, positional/file conflict, strict UTF-8 failure, empty input, terminal-without-input usage, text starting with a dash via `--`, and all documented flags. Assert `--help` makes no network calls, stdout is final text plus one newline, and `--show-steps` uses only stderr. Isolate environment variables in tests.
-- [ ] Add successful/failed JSON tests, safe diagnostics and exact exit codes, interruption `130`, and broken-pipe handling without traceback (exit `1`). Dry-run must report effective public settings, canonical chain/mode, call count, and character count without text/key, and instantiate no client. Reject dry-run with JSON/show-steps. Use the real HTTP fixture for subprocess tests of the default five calls, aliases/custom chain/repeat, creative prompt, environment auth, and a middle-hop failure that leaves plain stdout empty.
-- [ ] Run `python -m pytest tests/test_cli.py -q` and confirm missing-entry-point failures. Implement argparse options and mutual exclusions, safe input/config error handling, step rendering, JSON serialization, dry-run short circuit, and entry points. Handle input decoding/file errors as exit `2`, transport/protocol failures as `1`, and user interruption as `130`.
-- [ ] Document `pipx install .`, local Ollama preparation (`ollama pull qwen2.5:7b` and a running server), default/creative/preset/custom-chain examples, environment precedence, API base URLs, retries, JSON schema, stdout/stderr conventions, whole-document context limits, model-dependent fidelity, supported codes/aliases, and development commands. Link research sources from the spec. Do not claim live translation quality without live evaluation.
-- [ ] Run `python -m pytest -q` and `git diff --check`; build sdist/wheel with `python -m build`, install the wheel into an isolated virtualenv, run both `convolute --help` and `python -m convolute --dry-run 'test'`, and confirm default dry-run reports five calls and faithful mode. Verify the built artifact contains the license and package. If a configured live endpoint is available, perform the spec's comparison corpus; otherwise explicitly report live quality as unverified. Review the final diff against the spec and commit the task.
+- [x] Write CLI tests for positional/file/stdin selection, `--file -`, positional/file conflict, strict UTF-8 failure, empty input, terminal-without-input usage, text starting with a dash via `--`, and all documented flags. Assert `--help` makes no network calls, stdout is final text plus one newline, and `--show-steps` uses only stderr. Isolate environment variables in tests.
+- [x] Add successful/failed JSON tests, safe diagnostics and exact exit codes, interruption `130`, and broken-pipe handling without traceback (exit `1`). Dry-run must report effective public settings, canonical chain/mode, call count, and character count without text/key, and instantiate no client. Reject dry-run with JSON/show-steps. Use the real HTTP fixture for subprocess tests of the default five calls, aliases/custom chain/repeat, creative prompt, environment auth, and a middle-hop failure that leaves plain stdout empty.
+- [x] Run `python -m pytest tests/test_cli.py -q` and confirm missing-entry-point failures. Implement argparse options and mutual exclusions, safe input/config error handling, step rendering, JSON serialization, dry-run short circuit, and entry points. Handle input decoding/file errors as exit `2`, transport/protocol failures as `1`, and user interruption as `130`.
+- [x] Document `pipx install .`, local Ollama preparation (`ollama pull qwen2.5:7b` and a running server), default/creative/preset/custom-chain examples, environment precedence, API base URLs, retries, JSON schema, stdout/stderr conventions, whole-document context limits, model-dependent fidelity, supported codes/aliases, and development commands. Link research sources from the spec. Do not claim live translation quality without live evaluation.
+- [x] Run `python -m pytest -q` and `git diff --check`; build sdist/wheel with `python -m build`, install the wheel into an isolated virtualenv, run both `convolute --help` and `python -m convolute --dry-run 'test'`, and confirm default dry-run reports five calls and faithful mode. Verify the built artifact contains the license and package. If a configured live endpoint is available, perform the spec's comparison corpus; otherwise explicitly report live quality as unverified. Review the final diff against the spec and commit the task.
 
 ## Execution Prerequisites and Handoff
 
 Before product edits, obtain the user's plan review and execution-method selection. At execution time read the applicable worktree, execution, test-first, and verification skills. Inspect repository instructions and environment/network policy before installing dependencies. Use the already isolated native checkout if applicable; otherwise create a worktree according to the worktree skill. Keep generated virtualenvs, distributions, and scratch assets ignored. Never overwrite pre-existing user changes.
 
 Self-review completed: all approved spec sections map to the four tasks; all five review-focus classes have explicit verification; interfaces and result fields are consistent across tasks; live quality validation remains conditional on endpoint availability. No product code or dependencies have been added by this planning step.
+
+## Execution Verification
+
+- Automated suite: `python -m pytest -q` — 123 tests passed.
+- Built both sdist and wheel with `python -m build --no-isolation`.
+- Installed the wheel in a separate virtualenv; console help and isolated module dry-run succeeded with five default calls and faithful mode.
+- Verified wheel package files and GPL-3.0-only license metadata.
+- No live LLM endpoint was configured; paraphrase quality has not been measured.

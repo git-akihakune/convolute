@@ -81,10 +81,13 @@ def resolve_settings(options: Namespace, environ: Mapping[str, str]) -> Settings
         raise ValueError("timeout must be positive and finite")
     if temperature is not None and (not math.isfinite(temperature) or not 0 <= temperature <= 2):
         raise ValueError("temperature must be finite and between 0 and 2")
+    api_key = environ.get("CONVOLUTE_API_KEY") or None
+    if api_key and (not api_key.isascii() or any(ord(c) <= 32 or ord(c) == 127 for c in api_key)):
+        raise ValueError("CONVOLUTE_API_KEY must be a non-whitespace ASCII Bearer token")
     return Settings(
         chain=languages, preset=None if chain is not None else preset or "long",
         mode=mode, repeat=repeat,
         endpoint=normalize_endpoint(value("endpoint", "http://127.0.0.1:11434/v1", "CONVOLUTE_ENDPOINT")),
         model=model.strip(), timeout=timeout, retries=retries, temperature=temperature,
-        api_key=environ.get("CONVOLUTE_API_KEY") or None,
+        api_key=api_key,
     )
