@@ -5,8 +5,9 @@ import pytest
 
 from convolute.client import TranslationError
 from convolute.config import resolve_settings
-from convolute.display import Display, PlainDisplay, make_display
+from convolute.display import Display, PlainDisplay, SpinnerDisplay, make_display
 from convolute.pipeline import Step, run
+from convolute.terminal import LiveRegion, Painter, strip_ansi
 from conftest import FakeStream
 
 
@@ -67,3 +68,39 @@ def test_a_failed_run_prints_no_summary():
 ])
 def test_make_display_for_non_interactive_streams(kwargs,tty,expected):
     assert type(make_display(stream=FakeStream(tty),environ={'TERM':'xterm'},**kwargs)) is expected
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+def make(cls,width=80,color=False,**kwargs):
+    out, clock = FakeStream(), FakeClock()
+    region = LiveRegion(out,width=lambda: width,clock=clock,threaded=False)
+    return out, clock, region, cls(region,Painter(color),clock,**kwargs)
+
+
+def test_spinner_line_shows_progress_then_a_summary():
+    out,clock,region,display = make(SpinnerDisplay)
+    display.begin(LONG,37); display.hop_started(1,3,'de','ja'); clock.now = 1.2; region.tick()
+    screen = strip_ansi(out.getvalue())
+    assert 'de → ja' in screen and 'hop 3/5' in screen and '1.2s' in screen
+    clock.now = 10.4; display.end(RESULT_LONG)
+    assert strip_ansi(out.getvalue()).endswith('✔ 5 translations · 10.4s\n')
+
+
+def test_spinner_shows_pass_when_repeating_and_no_summary_on_failure():
+    repeated = resolve_settings(Namespace(preset='short',repeat=2),{})
+    out,clock,region,display = make(SpinnerDisplay)
+    display.begin(repeated,5); display.hop_started(2,1,'en','fr'); region.tick()
+    assert 'pass 2/2 · hop 1/2' in strip_ansi(out.getvalue())
+    display.end(FAILED); assert '✔' not in strip_ansi(out.getvalue())
+
+
+def test_make_display_gives_interactive_default_a_spinner():
+    display = make_display(quiet=False,verbose=False,steps=False,stream=FakeStream(True),environ={'TERM':'xterm'})
+    assert type(display) is SpinnerDisplay; display.close()

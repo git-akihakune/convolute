@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping
 from . import __version__
 from .config import Settings
 from .pipeline import RunResult, Step
+from .terminal import LiveRegion, Painter, detect_capabilities, spinner_frame
 
 
 def hops_per_pass(settings: Settings) -> int:
@@ -15,6 +16,13 @@ def hops_per_pass(settings: Settings) -> int:
 
 def total_hops(settings: Settings) -> int:
     return hops_per_pass(settings) * settings.repeat
+
+
+def progress(settings: Settings, pass_number: int, step_number: int) -> str:
+    label = f"hop {step_number}/{hops_per_pass(settings)}"
+    if settings.repeat > 1:
+        return f"pass {pass_number}/{settings.repeat} · {label}"
+    return label
 
 
 def header_rows(settings: Settings, input_chars: int, *, arrow: str, sep: str) -> list[tuple[str, str]]:
@@ -90,10 +98,63 @@ class PlainDisplay(Display):
             self._write(f"done in {elapsed:.1f}s, {total_hops(self._settings)} hops\n")
 
 
+class LiveDisplay(Display):
+    """Base for displays that animate a live region on an interactive terminal."""
+
+    def __init__(self, region: LiveRegion, painter: Painter, clock: Callable[[], float]):
+        self._region, self._painter, self._clock = region, painter, clock
+        self._settings: Settings | None = None
+        self._began = 0.0
+
+    def begin(self, settings: Settings, input_chars: int) -> None:
+        self._settings, self._began = settings, self._clock()
+        self._region.start(self._render)
+
+    def _render(self, now: float) -> list[str]:
+        raise NotImplementedError
+
+    def _elapsed(self) -> float:
+        return self._clock() - self._began
+
+    def close(self) -> None:
+        self._region.close()
+
+
+class SpinnerDisplay(LiveDisplay):
+    """One redrawn line while a hop runs, replaced by a dim summary when the run succeeds."""
+
+    def __init__(self, region: LiveRegion, painter: Painter, clock: Callable[[], float]):
+        super().__init__(region, painter, clock)
+        self._hop: tuple[int, int, str, str, float] | None = None
+
+    def hop_started(self, pass_number: int, step_number: int, source: str, target: str) -> None:
+        with self._region.lock:
+            self._hop = (pass_number, step_number, source, target, self._clock())
+
+    def _render(self, now: float) -> list[str]:
+        if self._hop is None:
+            return []
+        pass_number, step_number, source, target, started = self._hop
+        paint = self._painter
+        status = f"{progress(self._settings, pass_number, step_number)} · {now - started:.1f}s"
+        return [f"{paint.lang(target, spinner_frame(now))} {paint.lang(source, source)} {paint.dim('→')} "
+                f"{paint.lang(target, target)}  {paint.dim(status)}"]
+
+    def end(self, result: RunResult) -> None:
+        if result.status != "success":
+            self._region.finish()
+            return
+        summary = f"{total_hops(self._settings)} translations · {self._elapsed():.1f}s"
+        self._region.finish([f"{self._painter.ok('✔')} {self._painter.dim(summary)}"])
+
+
 def make_display(*, quiet: bool, verbose: bool, steps: bool, stream, environ: Mapping[str, str],
                  platform: str = sys.platform, clock: Callable[[], float] = time.monotonic) -> Display:
     if quiet:
         return Display()
+    caps = detect_capabilities(stream, environ, platform)
     if verbose or steps:
         return PlainDisplay(stream, verbose=verbose, steps=steps, clock=clock)
+    if caps.interactive:
+        return SpinnerDisplay(LiveRegion(stream, clock=clock), Painter(caps.color), clock)
     return Display()

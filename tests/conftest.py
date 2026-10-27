@@ -1,6 +1,10 @@
 import io
 import json
+import os
+import subprocess
+import sys
 import threading
+import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
@@ -25,14 +29,55 @@ class FakeStream(io.StringIO):
         return self._encoding
 
 
+def run_on_pty(args, *, columns=80, env=None, interrupt_when=None):
+    """Run the CLI with stderr on a pseudo-terminal; stdout stays a pipe."""
+    import fcntl, pty, select, signal, struct, termios
+    from convolute.terminal import strip_ansi
+    child_env = {name: value for name, value in os.environ.items() if name != 'NO_COLOR'}
+    child_env.update({'TERM':'xterm-256color','PYTHONUTF8':'1'})
+    child_env.update(env or {})
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH',24,columns,0,0))
+    proc = subprocess.Popen([sys.executable,'-m','convolute',*args], stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=slave, env=child_env)
+    os.close(slave)
+    chunks, interrupted, deadline = [], interrupt_when is None, time.monotonic()+30
+    try:
+        while time.monotonic() < deadline:
+            if select.select([master],[],[],0.05)[0]:
+                try:
+                    data = os.read(master,4096)
+                except OSError:
+                    break
+                if not data:
+                    break
+                chunks.append(data)
+                if not interrupted and interrupt_when in strip_ansi(b''.join(chunks).decode('utf-8','replace')):
+                    proc.send_signal(signal.SIGINT)
+                    interrupted = True
+            elif proc.poll() is not None:
+                break
+        try:
+            stdout, _ = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, _ = proc.communicate()
+    finally:
+        os.close(master)
+    terminal = b''.join(chunks).decode('utf-8','replace').replace('\r\n','\n')
+    return SimpleNamespace(returncode=proc.returncode, terminal=terminal, stdout=stdout)
+
+
 @pytest.fixture
 def server():
-    state = SimpleNamespace(requests=[], responses=deque())
+    state = SimpleNamespace(requests=[], responses=deque(), delay=0.0)
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             state.requests.append({'path':self.path,'headers':dict(self.headers),'body':body})
+            if state.delay:
+                time.sleep(state.delay)
             status, payload, headers = state.responses.popleft() if state.responses else (200, completion(), {})
             data = payload if isinstance(payload, bytes) else json.dumps(payload,ensure_ascii=False).encode()
             self.send_response(status)
