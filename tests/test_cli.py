@@ -110,6 +110,21 @@ def test_alias_chain_repeats_and_steps_on_stderr(server):
     assert all(len(req['body']['messages']) == 2 for req in server.requests)
 
 
+def test_verbose_without_a_terminal_is_a_plain_ascii_log(server):
+    result = invoke(['--endpoint',server.endpoint,'--preset','short','--verbose','text'])
+    err = result.stderr.decode()
+    assert result.returncode == 0 and result.stdout == b'translated\n'
+    assert 'pass 1, step 2: fr -> en' in err and 'done in' in err and err.isascii()
+
+
+def test_verbose_with_steps_and_quiet_without_a_terminal(server):
+    result = invoke(['--endpoint',server.endpoint,'--preset','short','--verbose','--show-steps','text'])
+    assert b'pass 1, step 1: en -> fr  ' in result.stderr and b'chars\ntranslated\n\n' in result.stderr
+    assert b'done in' in result.stderr
+    quiet = invoke(['--endpoint',server.endpoint,'--preset','short','--quiet','text'])
+    assert quiet.returncode == 0 and quiet.stdout == b'translated\n' and quiet.stderr == b''
+
+
 @pytest.mark.parametrize('structured',[False,True])
 def test_mid_chain_failure_cannot_look_like_success(server,structured):
     server.responses.extend([(200,completion('partial'),{}),(401,{'error':'PRIVATEKEY'}, {})])

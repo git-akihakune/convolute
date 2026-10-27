@@ -11,8 +11,9 @@ from typing import Sequence
 from . import __version__
 from .client import TranslationClient
 from .config import resolve_settings
+from .display import make_display
 from .languages import PRESETS
-from .pipeline import Step, run
+from .pipeline import run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,11 +52,6 @@ def _stdin_text() -> str:
     if hasattr(sys.stdin, "buffer"):
         return sys.stdin.buffer.read().decode("utf-8")
     return sys.stdin.read()
-
-
-def _show_step(step: Step) -> None:
-    print(f"pass {step.pass_number}, step {step.step_number}: {step.source} -> {step.target}\n{step.text}\n",
-          file=sys.stderr, flush=True)
 
 
 def _execute(argv: Sequence[str] | None) -> int:
@@ -99,8 +95,12 @@ def _execute(argv: Sequence[str] | None) -> int:
         print(json.dumps(plan, ensure_ascii=False), flush=True)
         return 0
 
-    with TranslationClient(settings) as client:
-        result = run(text, settings, client.translate, _show_step if args.show_steps else None)
+    display = make_display(quiet=args.quiet, verbose=args.verbose, steps=args.show_steps,
+                           stream=sys.stderr, environ=os.environ)
+    with TranslationClient(settings) as client, display:
+        display.begin(settings, len(text))
+        result = run(text, settings, client.translate, display.hop_finished, display.hop_started)
+        display.end(result)
     if args.json:
         print(json.dumps(asdict(result), ensure_ascii=False), flush=True)
     elif result.status == "success":
