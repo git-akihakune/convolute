@@ -1,3 +1,4 @@
+import io
 import json
 import threading
 from collections import deque
@@ -9,6 +10,19 @@ import pytest
 
 def completion(text='translated', **message):
     return {'choices':[{'finish_reason':'stop','message':{'role':'assistant','content':text,**message}}]}
+
+
+class FakeStream(io.StringIO):
+    def __init__(self, tty=True, encoding='utf-8'):
+        super().__init__()
+        self._tty, self._encoding = tty, encoding
+
+    def isatty(self):
+        return self._tty
+
+    @property
+    def encoding(self):
+        return self._encoding
 
 
 @pytest.fixture
