@@ -7,7 +7,10 @@ from collections.abc import Callable, Mapping
 from . import __version__
 from .config import Settings
 from .pipeline import RunResult, Step
-from .terminal import LiveRegion, Painter, detect_capabilities, spinner_frame
+from .terminal import LiveRegion, Painter, detect_capabilities, spinner_frame, visible_width
+
+REVEAL_SECONDS = 1.0
+REVEAL_CHARS_PER_SECOND = 60
 
 
 def hops_per_pass(settings: Settings) -> int:
@@ -23,6 +26,25 @@ def progress(settings: Settings, pass_number: int, step_number: int) -> str:
     if settings.repeat > 1:
         return f"pass {pass_number}/{settings.repeat} · {label}"
     return label
+
+
+def step_tag(settings: Settings, pass_number: int, step_number: int) -> str:
+    if settings.repeat > 1:
+        return f"[p{pass_number} {step_number}/{hops_per_pass(settings)}]"
+    return f"[{step_number}/{hops_per_pass(settings)}]"
+
+
+def reveal_count(length: int, elapsed: float) -> int:
+    """Characters of a translation shown `elapsed` seconds into its typing reveal."""
+    duration = min(REVEAL_SECONDS, length / REVEAL_CHARS_PER_SECOND)
+    if duration <= 0 or elapsed >= duration:
+        return length
+    return int(length * elapsed / duration)
+
+
+def is_revealable(text: str, width: int) -> bool:
+    """Only single-line text that fits one terminal row is typed out; anything else appears whole."""
+    return "\n" not in text and visible_width(text) + 2 <= width - 1
 
 
 def header_rows(settings: Settings, input_chars: int, *, arrow: str, sep: str) -> list[tuple[str, str]]:
@@ -148,13 +170,97 @@ class SpinnerDisplay(LiveDisplay):
         self._region.finish([f"{self._painter.ok('✔')} {self._painter.dim(summary)}"])
 
 
+class LogDisplay(LiveDisplay):
+    """Colored --verbose log: a header, then every hop committed to the scrollback as it finishes.
+
+    With `steps` each translation follows its hop line behind a colored bar (the chain log).
+    """
+
+    def __init__(self, region: LiveRegion, painter: Painter, clock: Callable[[], float], *, steps: bool):
+        super().__init__(region, painter, clock)
+        self._steps = steps
+        self._pending: tuple[int, int, str, str, float] | None = None
+        self._typing: tuple[str, str, float] | None = None
+        self._previous_chars = 0
+
+    def begin(self, settings: Settings, input_chars: int) -> None:
+        paint, region = self._painter, self._region
+        self._previous_chars = input_chars
+        region.print_above(f"convolute {__version__}")
+        rows = header_rows(settings, input_chars, arrow="→", sep=" · ")
+        for index, (key, value) in enumerate(rows):
+            glyph = "└" if index == len(rows) - 1 else "├"
+            region.print_above(f"{paint.dim(f'{glyph} {key:<9}')}{value}")
+        region.print_above("")
+        super().begin(settings, input_chars)
+
+    def hop_started(self, pass_number: int, step_number: int, source: str, target: str) -> None:
+        with self._region.lock:
+            self._pending = (pass_number, step_number, source, target, self._clock())
+
+    def _text_lines(self, target: str, text: str) -> str:
+        paint = self._painter
+        return "\n".join(f"  {paint.lang(target, '┃')} {paint.lang(target, line)}" for line in text.split("\n"))
+
+    def _flush_typing(self) -> None:
+        if self._typing is not None:
+            target, text, _ = self._typing
+            self._typing = None
+            self._region.print_above(self._text_lines(target, text))
+
+    def hop_finished(self, step: Step) -> None:
+        paint = self._painter
+        with self._region.lock:
+            self._flush_typing()
+            self._pending = None
+            tag = step_tag(self._settings, step.pass_number, step.step_number)
+            chars = len(step.text)
+            self._region.print_above(
+                f"{paint.dim(tag)} {paint.lang(step.source, step.source)} {paint.dim('→')} "
+                f"{paint.lang(step.target, step.target)}  {paint.ok('✔')} {paint.warn(f'{step.duration_seconds:.1f}s')}"
+                f"  {paint.dim(f'{self._previous_chars} → {chars} chars')}")
+            self._previous_chars = chars
+            if not self._steps:
+                return
+            if is_revealable(step.text, self._region.columns()):
+                self._typing = (step.target, step.text, self._clock())
+            else:
+                self._region.print_above(self._text_lines(step.target, step.text))
+
+    def _render(self, now: float) -> list[str]:
+        paint, lines = self._painter, []
+        if self._typing is not None:
+            target, text, started = self._typing
+            lines.append(self._text_lines(target, text[:reveal_count(len(text), now - started)]))
+        if self._pending is not None:
+            pass_number, step_number, source, target, started = self._pending
+            tag = step_tag(self._settings, pass_number, step_number)
+            lines.append(f"{paint.dim(tag)} {paint.lang(source, source)} {paint.dim('→')} "
+                         f"{paint.lang(target, target)}  {paint.lang(target, spinner_frame(now))} "
+                         f"{paint.dim(f'{now - started:.1f}s')}")
+        return lines
+
+    def end(self, result: RunResult) -> None:
+        with self._region.lock:
+            self._flush_typing()
+            self._pending = None
+        if result.status != "success":
+            self._region.finish()
+            return
+        summary = f"done in {self._elapsed():.1f}s · {total_hops(self._settings)} hops"
+        self._region.finish(["", f"{self._painter.ok('✔')} {self._painter.dim(summary)}"])
+
+
 def make_display(*, quiet: bool, verbose: bool, steps: bool, stream, environ: Mapping[str, str],
                  platform: str = sys.platform, clock: Callable[[], float] = time.monotonic) -> Display:
     if quiet:
         return Display()
     caps = detect_capabilities(stream, environ, platform)
+    if caps.interactive and (verbose or not steps):
+        region, painter = LiveRegion(stream, clock=clock), Painter(caps.color)
+        if verbose:
+            return LogDisplay(region, painter, clock, steps=steps)
+        return SpinnerDisplay(region, painter, clock)
     if verbose or steps:
         return PlainDisplay(stream, verbose=verbose, steps=steps, clock=clock)
-    if caps.interactive:
-        return SpinnerDisplay(LiveRegion(stream, clock=clock), Painter(caps.color), clock)
     return Display()
