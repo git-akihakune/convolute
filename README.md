@@ -21,7 +21,7 @@ From this repository:
 pipx install .
 ```
 
-Once the first release is published to PyPI, install remotely without cloning:
+Install remotely from PyPI without cloning:
 
 ```sh
 pipx install convolute

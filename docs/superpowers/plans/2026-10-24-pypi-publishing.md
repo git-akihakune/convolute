@@ -26,7 +26,7 @@
 - [x] Verify the source fixture, install the wheel into a fresh environment, and smoke-test the CLI outside the repository.
 - [x] Review workflow permissions, trigger, version consistency, and artifact transfer.
 - [x] Configure the GitHub environment and prepare reviewed files for push.
-- [ ] Register the PyPI pending publisher in the user's account, then publish the first release.
+- [x] Register the PyPI pending publisher in the user's account, then publish the first release.
 
 ## Review focus
 
@@ -40,4 +40,7 @@ The workflow must use a matching PyPI publisher identity; only release publicati
 - A fresh wheel installation passed CLI version and dry-run checks outside the repository.
 - The workflow's version check accepts `v0.1.0` and rejects `v0.1.1` with the current package version.
 - Independent static review found no concrete issues.
-- GitHub environment `pypi` exists. The user is configuring the PyPI pending publisher.
+- GitHub environment `pypi` exists; the user registered the PyPI pending publisher.
+- Release `v0.1.0` was published on 2026-10-27. GitHub Actions run `40586980732` passed both build and publish jobs.
+- PyPI serves both `convolute-0.1.0-py3-none-any.whl` and `convolute-0.1.0.tar.gz`.
+- A fresh `pipx install convolute==0.1.0` from PyPI passed version and dry-run checks.
