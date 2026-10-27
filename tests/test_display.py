@@ -5,10 +5,10 @@ import pytest
 
 from convolute.client import TranslationError
 from convolute.config import resolve_settings
-from convolute.display import (Display, LogDisplay, PlainDisplay, SpinnerDisplay, is_revealable,
-                               make_display, reveal_count)
+from convolute.display import (Display, LogDisplay, PlainDisplay, RailDisplay, SpinnerDisplay,
+                               is_revealable, make_display, preview, rail_text, reveal_count)
 from convolute.pipeline import Step, run
-from convolute.terminal import LiveRegion, Painter, strip_ansi
+from convolute.terminal import LiveRegion, Painter, strip_ansi, visible_width
 from conftest import FakeStream
 
 
@@ -153,3 +153,49 @@ def test_chain_log_prints_long_multiparagraph_text_whole_and_immediately():
 def test_make_display_gives_interactive_verbose_a_log():
     display = make_display(quiet=False,verbose=True,steps=True,stream=FakeStream(True),environ={'TERM':'xterm'})
     assert type(display) is LogDisplay; display.close()
+
+
+EXTENDED = resolve_settings(Namespace(preset='extended'),{}).chain
+
+
+@pytest.mark.parametrize('width',[80,60,40,20])
+@pytest.mark.parametrize('current',range(9))
+def test_rail_never_reaches_the_terminal_width(width,current):
+    line = rail_text(EXTENDED,current,Painter(True),phase=3,done=False,width=width)
+    assert visible_width(line) <= width - 1
+
+
+def test_rail_marks_progress_and_fills_when_done():
+    line = strip_ansi(rail_text(LONG.chain,2,Painter(True),phase=0,done=False,width=120))
+    assert line.startswith('EN ━━━━ FR ━━━━ DE') and 'JA⠋' in line and '╌' in line
+    assert '╌' not in rail_text(LONG.chain,4,Painter(False),phase=0,done=True,width=120)
+
+
+def test_preview_collapses_paragraphs_to_one_row():
+    assert preview('Eins.\n\nZwei.  Drei.') == 'Eins. Zwei. Drei.'
+
+
+def test_rail_display_replaces_text_each_hop_and_resets_per_pass():
+    repeated = resolve_settings(Namespace(preset='short',repeat=2),{})
+    out,clock,region,display = make(RailDisplay)
+    display.begin(repeated,5); display.hop_started(1,1,'en','fr'); display.hop_finished(Step(1,1,'en','fr','Bonjour',1.0))
+    display.hop_started(1,2,'fr','en'); clock.now = 2; region.tick()
+    assert '┃ Bonjour' in strip_ansi(out.getvalue())
+    display.hop_started(2,1,'en','fr'); region.tick()
+    assert 'pass 2/2 · hop 1/2' in strip_ansi(out.getvalue())
+
+
+def test_rail_display_clips_long_double_width_text_and_leaves_a_receipt():
+    out,clock,region,display = make(RailDisplay,width=40)
+    display.begin(LONG,5); display.hop_started(1,1,'en','ja')
+    display.hop_finished(Step(1,1,'en','ja','会議は金曜日に変更されました。'*10,1.0))
+    display.hop_started(1,2,'ja','es'); clock.now = 5; region.tick()
+    rows = strip_ansi(out.getvalue()).replace('\r','').split('\n')
+    assert max(visible_width(row) for row in rows) <= 39
+    clock.now = 10.4; display.end(RESULT_LONG)
+    assert strip_ansi(out.getvalue()).endswith('✔ done · 5 hops · 10.4s\n')
+
+
+def test_make_display_gives_interactive_show_steps_a_rail():
+    display = make_display(quiet=False,verbose=False,steps=True,stream=FakeStream(True),environ={'TERM':'xterm'})
+    assert type(display) is RailDisplay; display.close()

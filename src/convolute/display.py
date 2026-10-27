@@ -2,12 +2,13 @@
 
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 
 from . import __version__
 from .config import Settings
 from .pipeline import RunResult, Step
-from .terminal import LiveRegion, Painter, detect_capabilities, spinner_frame, visible_width
+from .terminal import (FRAME_SECONDS, FRAMES, LiveRegion, Painter, clip, detect_capabilities,
+                       spinner_frame, visible_width)
 
 REVEAL_SECONDS = 1.0
 REVEAL_CHARS_PER_SECOND = 60
@@ -142,6 +143,14 @@ class LiveDisplay(Display):
         self._region.close()
 
 
+def hop_status(paint: Painter, settings: Settings, hop: tuple[int, int, str, str, float], now: float) -> str:
+    """The spinner line for the hop in progress: `⠹ de → ja  hop 3/5 · 1.2s`."""
+    pass_number, step_number, source, target, started = hop
+    status = f"{progress(settings, pass_number, step_number)} · {now - started:.1f}s"
+    return (f"{paint.lang(target, spinner_frame(now))} {paint.lang(source, source)} {paint.dim('→')} "
+            f"{paint.lang(target, target)}  {paint.dim(status)}")
+
+
 class SpinnerDisplay(LiveDisplay):
     """One redrawn line while a hop runs, replaced by a dim summary when the run succeeds."""
 
@@ -156,11 +165,7 @@ class SpinnerDisplay(LiveDisplay):
     def _render(self, now: float) -> list[str]:
         if self._hop is None:
             return []
-        pass_number, step_number, source, target, started = self._hop
-        paint = self._painter
-        status = f"{progress(self._settings, pass_number, step_number)} · {now - started:.1f}s"
-        return [f"{paint.lang(target, spinner_frame(now))} {paint.lang(source, source)} {paint.dim('→')} "
-                f"{paint.lang(target, target)}  {paint.dim(status)}"]
+        return [hop_status(self._painter, self._settings, self._hop, now)]
 
     def end(self, result: RunResult) -> None:
         if result.status != "success":
@@ -251,15 +256,99 @@ class LogDisplay(LiveDisplay):
         self._region.finish(["", f"{self._painter.ok('✔')} {self._painter.dim(summary)}"])
 
 
+def preview(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _rail(chain: Sequence[str], nodes: range, current: int, paint: Painter, phase: int, done: bool,
+          segment: int) -> str:
+    line = ""
+    for index in nodes:
+        code = chain[index]
+        label = code.upper()
+        line += paint.lang(code, label, bold=True) if done or index <= current else paint.dim(label)
+        line += paint.lang(code, FRAMES[phase % len(FRAMES)]) if not done and index == current + 1 else " "
+        if segment and index != nodes[-1]:
+            if done or index < current:
+                part = paint.lang(chain[index + 1], "━" * segment)
+            elif index == current:
+                position = (phase // 2) % segment
+                part = paint.lang(chain[index + 1], "╌" * position + "━" + "╌" * (segment - position - 1))
+            else:
+                part = paint.dim("╌" * segment)
+            line += f"{part} "
+    return line.rstrip()
+
+
+def rail_text(chain: Sequence[str], current: int, painter: Painter, *, phase: int, done: bool,
+              width: int) -> str:
+    """`EN ━━━━ FR ━━━━ DE ╌╌╌╌ JA`, shrunk, then windowed around the active language, to fit width."""
+    limit, count = width - 1, len(chain)
+    for segment in (4, 2, 1, 0):
+        line = _rail(chain, range(count), current, painter, phase, done, segment)
+        if visible_width(line) <= limit:
+            return line
+    center = min(current + 1, count - 1)
+    for size in range(count - 1, 0, -1):
+        start = max(0, min(center - size // 2, count - size))
+        stop = start + size
+        line = (("… " if start else "") + _rail(chain, range(start, stop), current, painter, phase, done, 0)
+                + (" …" if stop < count else ""))
+        if visible_width(line) <= limit:
+            return line
+    return clip(_rail(chain, range(center, center + 1), current, painter, phase, done, 0), width)
+
+
+class RailDisplay(LiveDisplay):
+    """--show-steps on a terminal: a progress rail with the latest translation under it, redrawn in place."""
+
+    def __init__(self, region: LiveRegion, painter: Painter, clock: Callable[[], float]):
+        super().__init__(region, painter, clock)
+        self._hop: tuple[int, int, str, str, float] | None = None
+        self._latest: tuple[str, str, float] | None = None
+
+    def hop_started(self, pass_number: int, step_number: int, source: str, target: str) -> None:
+        with self._region.lock:
+            self._hop = (pass_number, step_number, source, target, self._clock())
+
+    def hop_finished(self, step: Step) -> None:
+        with self._region.lock:
+            self._latest = (step.target, preview(step.text), self._clock())
+
+    def _render(self, now: float) -> list[str]:
+        if self._hop is None:
+            return []
+        paint, width = self._painter, self._region.columns()
+        lines = [rail_text(self._settings.chain, self._hop[1] - 1, paint, phase=int(now / FRAME_SECONDS),
+                           done=False, width=width),
+                 hop_status(paint, self._settings, self._hop, now)]
+        if self._latest is not None:
+            target, text, finished = self._latest
+            shown = text[:reveal_count(len(text), now - finished)] if is_revealable(text, width) else text
+            lines.append(f"{paint.lang(target, '┃')} {paint.lang(target, shown)}")
+        return lines
+
+    def end(self, result: RunResult) -> None:
+        if result.status != "success":
+            self._region.finish()
+            return
+        paint = self._painter
+        rail = rail_text(self._settings.chain, 0, paint, phase=0, done=True, width=self._region.columns())
+        summary = f"done · {total_hops(self._settings)} hops · {self._elapsed():.1f}s"
+        self._region.finish([rail, f"{paint.ok('✔')} {paint.dim(summary)}"])
+
+
 def make_display(*, quiet: bool, verbose: bool, steps: bool, stream, environ: Mapping[str, str],
                  platform: str = sys.platform, clock: Callable[[], float] = time.monotonic) -> Display:
     if quiet:
         return Display()
     caps = detect_capabilities(stream, environ, platform)
-    if caps.interactive and (verbose or not steps):
+    if caps.interactive:
         region, painter = LiveRegion(stream, clock=clock), Painter(caps.color)
         if verbose:
             return LogDisplay(region, painter, clock, steps=steps)
+        if steps:
+            return RailDisplay(region, painter, clock)
         return SpinnerDisplay(region, painter, clock)
     if verbose or steps:
         return PlainDisplay(stream, verbose=verbose, steps=steps, clock=clock)
