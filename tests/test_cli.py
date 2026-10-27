@@ -50,6 +50,21 @@ def test_invalid_cli_arguments(args):
     assert result.returncode == 2 and result.stdout == b'' and b'Traceback' not in result.stderr
 
 
+@pytest.mark.parametrize('args', [
+    ['--dry-run','--verbose','x'], ['--dry-run','--clipboard','x'],
+    ['--quiet','--verbose','x'], ['--quiet','--show-steps','x'],
+])
+def test_conflicting_output_flags_are_usage_errors(args):
+    result = invoke(args)
+    assert result.returncode == 2 and result.stdout == b'' and b'cannot be combined' in result.stderr
+
+
+def test_help_lists_display_flags_and_quiet_dry_run_is_allowed():
+    help_text = invoke(['--help']).stdout
+    assert all(flag in help_text for flag in (b'--verbose', b'--clipboard', b'--quiet'))
+    assert invoke(['--dry-run','--quiet','x']).returncode == 0
+
+
 @pytest.mark.parametrize('source',['positional','stdin','file','explicit-stdin'])
 def test_utf8_input_methods_and_final_only_stdout(server,tmp_path,source):
     text = '你好\n\nThe meeting is at 14:00.'

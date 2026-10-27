@@ -36,6 +36,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retries", type=int, metavar="N", help="opt-in retries per hop (default: 0)")
     parser.add_argument("--temperature", type=float, help="optional sampling temperature, 0–2; otherwise server default")
     parser.add_argument("--show-steps", action="store_true", help="print intermediate translations to stderr")
+    parser.add_argument("--verbose", action="store_true",
+                        help="print a colored log of settings and per-hop results to stderr")
+    parser.add_argument("--clipboard", action="store_true", help="copy the final translation to the system clipboard")
+    parser.add_argument("--quiet", action="store_true",
+                        help="suppress the spinner and all other stderr decoration; errors still print")
     parser.add_argument("--json", action="store_true", help="emit the complete run record as JSON")
     parser.add_argument("--dry-run", action="store_true", help="print a plan without sending text or contacting the endpoint")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -58,8 +63,10 @@ def _execute(argv: Sequence[str] | None) -> int:
     args = parser.parse_args(argv)
     if args.text is not None and args.file is not None:
         parser.error("text and --file cannot be used together")
-    if args.dry_run and (args.json or args.show_steps):
-        parser.error("--dry-run cannot be combined with --json or --show-steps")
+    if args.dry_run and (args.json or args.show_steps or args.verbose or args.clipboard):
+        parser.error("--dry-run cannot be combined with --json, --show-steps, --verbose, or --clipboard")
+    if args.quiet and (args.verbose or args.show_steps):
+        parser.error("--quiet cannot be combined with --verbose or --show-steps")
     try:
         settings = resolve_settings(args, os.environ)
     except ValueError as error:
