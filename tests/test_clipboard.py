@@ -27,10 +27,14 @@ def test_macos_sends_exact_utf8_bytes_with_a_utf8_locale():
     assert kwargs['stdout'] is subprocess.DEVNULL and kwargs['stderr'] is subprocess.DEVNULL
 
 
-def test_windows_sends_utf16_with_a_byte_order_mark():
+def test_windows_sends_utf16_to_the_system_clip_exe_never_a_path_lookup():
     calls = []
-    copy_text(JAPANESE,platform='win32',environ={},which=everything,run=fake_run(calls))
-    assert calls[0][1]['input'] == ('﻿'+JAPANESE).encode('utf-16-le')
+    system_clip = r'C:\Windows\System32\clip.exe'
+    def which(name):
+        return name if name == system_clip else '/tmp/planted/' + name
+    copy_text(JAPANESE,platform='win32',environ={'SystemRoot':r'C:\Windows'},which=which,run=fake_run(calls))
+    assert calls[0][0] == [system_clip]
+    assert calls[0][1]['input'] == ('\ufeff'+JAPANESE).encode('utf-16-le')
 
 
 @pytest.mark.parametrize('environ,available,expected',[

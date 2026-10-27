@@ -1,5 +1,6 @@
 """Copy text to the system clipboard with the platform's own tool."""
 
+import ntpath
 import os
 import shutil
 import subprocess
@@ -15,7 +16,10 @@ def _find_tool(platform: str, environ: Mapping[str, str], which: Callable[[str],
     if platform == "darwin":
         candidates = [(["pbcopy"], "utf-8")]
     elif platform == "win32":
-        candidates = [(["clip"], "utf-16")]
+        # An absolute path: a bare `clip` lookup searches the current directory first on Windows,
+        # so a planted clip.exe could receive the text.
+        clip = ntpath.join(environ.get("SystemRoot", r"C:\Windows"), "System32", "clip.exe")
+        candidates = [([clip], "utf-16")]
     else:
         candidates = [(["wl-copy"], "utf-8")] if environ.get("WAYLAND_DISPLAY") else []
         candidates += [(["xclip", "-selection", "clipboard"], "utf-8"),
