@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import Sequence
 
 from . import __version__
+from .clipboard import ClipboardError, copy_text
 from .client import TranslationClient
 from .config import resolve_settings
 from .display import make_display
 from .languages import PRESETS
 from .pipeline import run
+from .terminal import Painter, detect_capabilities
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,6 +54,18 @@ def _stdin_text() -> str:
     if hasattr(sys.stdin, "buffer"):
         return sys.stdin.buffer.read().decode("utf-8")
     return sys.stdin.read()
+
+
+def _copy_to_clipboard(text: str, quiet: bool) -> None:
+    try:
+        copy_text(text)
+    except ClipboardError as error:
+        print(f"convolute: warning: could not copy to the clipboard: {error}", file=sys.stderr)
+        return
+    caps = detect_capabilities(sys.stderr, os.environ)
+    if caps.interactive and not quiet:
+        paint = Painter(caps.color)
+        print(f"{paint.ok('✔')} {paint.dim('copied to clipboard')}", file=sys.stderr)
 
 
 def _execute(argv: Sequence[str] | None) -> int:
@@ -112,6 +126,8 @@ def _execute(argv: Sequence[str] | None) -> int:
         print(f"convolute: pass {error['pass_number']}, step {error['step_number']}: "
               f"{error['source']} -> {error['target']}: {error['message']}", file=sys.stderr)
         return 1
+    if args.clipboard:
+        _copy_to_clipboard(result.output, args.quiet)
     return 0
 
 

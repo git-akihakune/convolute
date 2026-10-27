@@ -5,7 +5,7 @@ import pytest
 pytest.importorskip('pty')
 
 from convolute.terminal import strip_ansi, visible_width
-from conftest import completion, run_on_pty
+from conftest import completion, fake_clipboard, run_on_pty
 
 
 def test_default_run_animates_clears_and_leaves_only_the_translation(server):
@@ -39,6 +39,17 @@ def test_extended_rail_never_wraps_on_a_narrow_terminal(server):
     rows = [row for row in re.split(r'[\r\n]',strip_ansi(result.terminal)) if '━' in row or '╌' in row]
     assert result.returncode == 0 and result.stdout == b'translated\n'
     assert rows and all(visible_width(row) <= 59 for row in rows)
+
+
+def test_confirmation_appears_on_a_terminal_unless_quiet(server,tmp_path):
+    clip = fake_clipboard(tmp_path)
+    base = ['--endpoint',server.endpoint,'--preset','short','--clipboard']
+    shown = run_on_pty([*base,'x'],env=clip)
+    assert '✔ copied to clipboard' in strip_ansi(shown.terminal)
+    assert (tmp_path/'clip.out').read_bytes() == b'translated'
+    (tmp_path/'clip.out').unlink()
+    quiet = run_on_pty([*base,'--quiet','x'],env=clip)
+    assert quiet.terminal == '' and (tmp_path/'clip.out').read_bytes() == b'translated'
 
 
 def test_quiet_no_color_and_dumb_terminals(server):

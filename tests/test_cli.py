@@ -7,7 +7,9 @@ import sys
 import pytest
 
 from convolute.cli import main
-from conftest import completion
+from conftest import completion, fake_clipboard
+
+posix_only = pytest.mark.skipif(sys.platform == 'win32',reason='fake clipboard tools are shell scripts')
 
 
 @pytest.fixture(autouse=True)
@@ -115,6 +117,41 @@ def test_verbose_without_a_terminal_is_a_plain_ascii_log(server):
     err = result.stderr.decode()
     assert result.returncode == 0 and result.stdout == b'translated\n'
     assert 'pass 1, step 2: fr -> en' in err and 'done in' in err and err.isascii()
+
+
+@posix_only
+def test_clipboard_gets_the_final_translation_only(server,tmp_path):
+    env = {**os.environ,**fake_clipboard(tmp_path)}
+    server.responses.extend([(200,completion('intermediate'),{}),(200,completion('final 你好'),{})])
+    result = invoke(['--endpoint',server.endpoint,'--preset','short','--clipboard','x'],env=env)
+    assert result.returncode == 0 and result.stdout == 'final 你好\n'.encode() and result.stderr == b''
+    assert (tmp_path/'clip.out').read_bytes() == 'final 你好'.encode()
+
+
+@posix_only
+def test_clipboard_with_json_copies_the_output_text(server,tmp_path):
+    env = {**os.environ,**fake_clipboard(tmp_path)}
+    result = invoke(['--endpoint',server.endpoint,'--preset','short','--json','--clipboard','x'],env=env)
+    assert json.loads(result.stdout)['output'] == 'translated'
+    assert (tmp_path/'clip.out').read_bytes() == b'translated'
+
+
+@posix_only
+def test_failed_run_copies_nothing(server,tmp_path):
+    env = {**os.environ,**fake_clipboard(tmp_path)}
+    server.responses.extend([(200,completion('partial'),{}),(401,{'error':'x'},{})])
+    result = invoke(['--endpoint',server.endpoint,'--preset','short','--clipboard','x'],env=env)
+    assert result.returncode == 1 and not (tmp_path/'clip.out').exists()
+
+
+@posix_only
+@pytest.mark.parametrize('broken',['missing','nonzero'])
+def test_clipboard_failure_warns_but_keeps_the_result_and_exit_code(server,tmp_path,broken):
+    extra = fake_clipboard(tmp_path,exit_code=3) if broken == 'nonzero' else {'PATH':str(tmp_path)}
+    result = invoke(['--endpoint',server.endpoint,'--preset','short','--quiet','--clipboard','x'],
+                    env={**os.environ,**extra})
+    assert result.returncode == 0 and result.stdout == b'translated\n'
+    assert b'warning' in result.stderr and b'clipboard' in result.stderr
 
 
 def test_verbose_with_steps_and_quiet_without_a_terminal(server):

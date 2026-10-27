@@ -29,6 +29,14 @@ class FakeStream(io.StringIO):
         return self._encoding
 
 
+def fake_clipboard(tmp_path, exit_code=0):
+    """Put a fake clipboard tool alone on PATH; returns the extra environment variables that select it."""
+    tool = tmp_path / ('pbcopy' if sys.platform == 'darwin' else 'xclip')
+    tool.write_text(f'#!/bin/sh\n/bin/cat > "$CLIP_OUT"\nexit {exit_code}\n')
+    tool.chmod(0o755)
+    return {'PATH':str(tmp_path),'CLIP_OUT':str(tmp_path/'clip.out')}
+
+
 def run_on_pty(args, *, columns=80, env=None, interrupt_when=None):
     """Run the CLI with stderr on a pseudo-terminal; stdout stays a pipe."""
     import fcntl, pty, select, signal, struct, termios
