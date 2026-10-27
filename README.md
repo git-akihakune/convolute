@@ -59,6 +59,10 @@ convolute --preset long --repeat 2 "Ten translations in total."
 convolute --chain en,fr,en --temperature 0.7 "Use a sampling override."
 cat corpus.txt | convolute > paraphrased.txt
 convolute --file corpus.txt --show-steps
+convolute --verbose "Log settings and per-hop timings."
+convolute --show-steps --verbose --file corpus.txt
+convolute --clipboard "Copy the final translation."
+convolute --quiet "No spinner or other decoration."
 convolute --file corpus.txt --json > run.json
 convolute --dry-run --preset extended --repeat 2 "Inspect eighteen calls."
 convolute -- "-text beginning with a dash"
@@ -153,11 +157,43 @@ truncated completions fail rather than becoming inputs to later hops.
 
 `--dry-run` emits a JSON execution plan with the canonical chain, mode, effective
 settings, `total_calls`, and `input_characters`. It includes neither input text nor
-credentials, and makes no network calls. It cannot be combined with `--json` or
-`--show-steps`.
+credentials, and makes no network calls. It cannot be combined with `--json`,
+`--show-steps`, `--verbose`, or `--clipboard`.
 
 Exit codes: `0` success, `1` translation/transport/protocol or output-pipe failure,
 `2` invalid configuration/input, `130` interruption.
+
+## Terminal display
+
+Everything decorative goes to stderr; stdout and `--json` are unchanged. A terminal is
+"interactive" when stderr is a TTY, `TERM` is not `dumb`, stderr uses UTF-8, and, on
+Windows, `WT_SESSION` is set (Windows Terminal). Anything else gets plain ASCII text
+with no color or animation.
+
+| Flags | Interactive stderr | Otherwise |
+| --- | --- | --- |
+| none | A spinner line, replaced by a one-line summary | Nothing |
+| `--verbose` | Colored log: settings, one line per hop, summary | The same log as plain text |
+| `--show-steps` | Live rail: a progress line redrawn in place, with the latest translation under it | The `pass P, step S: src -> tgt` blocks, unchanged |
+| `--show-steps --verbose` | Chain log: every hop and its text stays in the scrollback | Plain log with each hop's text |
+| `--quiet` | Nothing | Nothing |
+
+`NO_COLOR` removes color but keeps the animation. `--quiet` removes the spinner, the
+summary, and the clipboard confirmation; errors and warnings still print. It cannot be
+combined with `--verbose` or `--show-steps`. Translations arrive whole, so the typing
+effect after each hop is cosmetic: single-line text is typed out in at most a second,
+and longer or multi-line text appears at once.
+
+### Clipboard
+
+`--clipboard` copies the final translation to the system clipboard after a successful
+run, without the trailing newline that stdout adds. It uses the system's own tool:
+`pbcopy` on macOS; `wl-copy` (when `WAYLAND_DISPLAY` is set), `xclip`, `xsel`, or WSL's
+`clip.exe` on Linux; and `System32\clip.exe` on Windows. Stdout still prints the
+result, and with `--json` the copied text is the `output` field. On an interactive
+terminal a `✔ copied to clipboard` line follows. If no tool is available or the copy
+fails, a warning goes to stderr and the exit code stays `0`, since the run succeeded.
+A failed run copies nothing. `--clipboard` cannot be combined with `--dry-run`.
 
 ## Scope and data handling
 
@@ -187,7 +223,8 @@ python -m build
 ```
 
 Tests exercise configuration, actual HTTP requests to a local fixture server,
-request ordering, repeats, CLI subprocesses, retries, and failure records without
+request ordering, repeats, CLI subprocesses, retries, failure records, terminal
+rendering on a pseudo-terminal (skipped on Windows), and a fake clipboard tool without
 requiring an LLM or paid API. Test runs need permission to bind a loopback socket.
 
 Protocol tests do not establish paraphrase quality. Before adopting a default for

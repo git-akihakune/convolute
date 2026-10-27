@@ -24,7 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Paraphrase text through a chain of LLM translations.",
         epilog=("Defaults: long preset (5 translations), faithful mode, repeat 1, "
                 "local Ollama at http://127.0.0.1:11434/v1, model qwen2.5:7b. "
-                "With no text or --file, read UTF-8 stdin. Use -- before text starting with '-'."),
+                "With no text or --file, read UTF-8 stdin. Use -- before text starting with '-'. "
+                "An interactive stderr shows a spinner; --quiet turns it off."),
     )
     parser.add_argument("text", nargs="?", help="text to paraphrase")
     parser.add_argument("--file", metavar="PATH", help="read UTF-8 text from a file; '-' reads stdin")
