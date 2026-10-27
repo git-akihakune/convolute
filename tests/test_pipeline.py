@@ -57,3 +57,18 @@ def test_interrupt_is_not_a_translation_error():
         raise KeyboardInterrupt
     with pytest.raises(KeyboardInterrupt):
         run('x',resolve_settings(Namespace(),{}),translate)
+
+
+def test_on_start_precedes_every_translation_including_the_failing_one():
+    events = []
+    def translate(text,source,target):
+        events.append(('translate',source,target))
+        if events.count(('translate','en','fr')) == 2:
+            raise TranslationError('timeout','request timed out')
+        return 'x'
+    run('x',resolve_settings(Namespace(chain='en,fr,en',repeat=2),{}),translate,
+        lambda s: events.append(('done',s.pass_number,s.step_number)),
+        lambda *hop: events.append(('start',*hop)))
+    assert events == [('start',1,1,'en','fr'),('translate','en','fr'),('done',1,1),
+                      ('start',1,2,'fr','en'),('translate','fr','en'),('done',1,2),
+                      ('start',2,1,'en','fr'),('translate','en','fr')]

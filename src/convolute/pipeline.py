@@ -37,7 +37,8 @@ class RunResult:
 
 def run(text: str, settings: Settings,
         translate: Callable[[str, str, str], str],
-        on_step: Callable[[Step], None] | None = None) -> RunResult:
+        on_step: Callable[[Step], None] | None = None,
+        on_start: Callable[[int, int, str, str], None] | None = None) -> RunResult:
     result = RunResult(
         input=text, chain=settings.chain, preset=settings.preset, mode=settings.mode,
         repeat=settings.repeat, model=settings.model, endpoint=settings.endpoint,
@@ -46,6 +47,8 @@ def run(text: str, settings: Settings,
     current = text
     for pass_number in range(1, settings.repeat + 1):
         for step_number, (source, target) in enumerate(zip(settings.chain, settings.chain[1:]), 1):
+            if on_start is not None:
+                on_start(pass_number, step_number, source, target)
             started = monotonic()
             try:
                 current = translate(current, source, target)
