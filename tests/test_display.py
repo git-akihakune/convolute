@@ -196,6 +196,23 @@ def test_rail_display_clips_long_double_width_text_and_leaves_a_receipt():
     assert strip_ansi(out.getvalue()).endswith('✔ done · 5 hops · 10.4s\n')
 
 
+def test_chain_log_keeps_the_last_typed_text_when_the_run_is_interrupted():
+    out,clock,region,display = make(LogDisplay,steps=True)
+    display.begin(LONG,5); display.hop_started(1,1,'en','fr')
+    display.hop_finished(Step(1,1,'en','fr','Bonjour tout le monde.',1.0))
+    display.close()
+    assert 'Bonjour tout le monde.' in strip_ansi(out.getvalue())
+
+
+def test_tabs_never_reach_a_live_row_and_preview_strips_controls():
+    text = 'Name\tAlter\tStadt\tLand\tTelefon\tE-Mail\tNotiz'
+    out,clock,region,display = make(LogDisplay,width=60,steps=True)
+    display.begin(LONG,5); display.hop_started(1,1,'en','de'); display.hop_finished(Step(1,1,'en','de',text,1.0))
+    clock.now = 2; region.tick()
+    assert '\t' not in out.getvalue() and 'Name Alter Stadt' in strip_ansi(out.getvalue())
+    assert preview('a\x07b\tc') == 'a b c'
+
+
 def test_make_display_gives_interactive_show_steps_a_rail():
     display = make_display(quiet=False,verbose=False,steps=True,stream=FakeStream(True),environ={'TERM':'xterm'})
     assert type(display) is RailDisplay; display.close()

@@ -4,7 +4,7 @@ import pytest
 
 from convolute.languages import LANGUAGES
 from convolute.terminal import (LANGUAGE_COLORS, LiveRegion, Painter, clip, detect_capabilities,
-                                strip_ansi, terminal_width, visible_width)
+                                printable, strip_ansi, terminal_width, visible_width)
 from conftest import FakeStream
 
 
@@ -45,6 +45,12 @@ def test_width_and_clip_handle_escapes_and_double_width_text():
 
 def test_terminal_width_falls_back_without_a_terminal():
     assert terminal_width(FakeStream()) == 80
+
+
+def test_emoji_selector_counts_wide_and_printable_replaces_control_characters():
+    assert visible_width('❤️') == 2 and visible_width('a❤️b') == 4
+    assert printable('a\tb\x07c') == 'a b c' and printable('plain 会') == 'plain 会'
+    assert visible_width(clip('❤️'*20,10)) <= 10
 
 
 def test_block_is_redrawn_in_place():

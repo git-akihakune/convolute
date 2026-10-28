@@ -41,7 +41,9 @@ def copy_text(text: str, *, platform: str = sys.platform, environ: Mapping[str, 
     command, encoding = found
     # clip.exe reads UTF-16 with a byte order mark; macOS pbcopy decodes by locale, so force UTF-8.
     data = ("﻿" + text).encode("utf-16-le") if encoding == "utf-16" else text.encode()
-    env = {**environ, "LC_CTYPE": "UTF-8"} if platform == "darwin" else dict(environ)
+    # LC_ALL outranks LC_CTYPE, so it must go for the UTF-8 locale to take effect.
+    env = ({**{name: value for name, value in environ.items() if name != "LC_ALL"}, "LC_CTYPE": "UTF-8"}
+           if platform == "darwin" else dict(environ))
     try:
         # DEVNULL, not pipes: a forked xclip keeps inherited pipes open and would stall the wait.
         completed = run(command, input=data, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

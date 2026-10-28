@@ -54,7 +54,14 @@ def strip_ansi(text: str) -> str:
     return _TOKEN.sub(lambda match: match.group(2) or "", text)
 
 
+def printable(text: str) -> str:
+    """Replace control characters, tabs included, with spaces so a live row's width is predictable."""
+    return "".join(" " if unicodedata.category(char) == "Cc" else char for char in text)
+
+
 def _char_width(char: str) -> int:
+    if char == "️":
+        return 1  # emoji presentation selector: most terminals draw the character before it two columns wide
     if unicodedata.combining(char) or unicodedata.category(char) in ("Mn", "Me", "Cf"):
         return 0
     return 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1

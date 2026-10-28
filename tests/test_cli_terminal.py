@@ -33,6 +33,14 @@ def test_ctrl_c_mid_hop_exits_130_with_the_cursor_restored(server):
     assert result.terminal.rfind('\x1b[?25h') > result.terminal.rfind('\x1b[?25l')
 
 
+def test_ctrl_c_keeps_the_last_finished_hop_in_the_chain_log(server):
+    server.responses.append((200,completion('Bonjour tout le monde.'),{})); server.delay = 1.5
+    result = run_on_pty(['--endpoint',server.endpoint,'--preset','short','--verbose','--show-steps','x'],
+                        interrupt_when='[2/2]')
+    assert result.returncode == 130 and 'Bonjour tout le monde.' in strip_ansi(result.terminal)
+    assert result.terminal.rfind('\x1b[?25h') > result.terminal.rfind('\x1b[?25l')
+
+
 def test_extended_rail_never_wraps_on_a_narrow_terminal(server):
     server.delay = 0.2
     result = run_on_pty(['--endpoint',server.endpoint,'--preset','extended','--show-steps','x'],columns=60)

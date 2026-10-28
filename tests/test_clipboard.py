@@ -27,6 +27,13 @@ def test_macos_sends_exact_utf8_bytes_with_a_utf8_locale():
     assert kwargs['stdout'] is subprocess.DEVNULL and kwargs['stderr'] is subprocess.DEVNULL
 
 
+def test_macos_drops_lc_all_so_the_utf8_ctype_applies():
+    calls = []
+    copy_text('x',platform='darwin',environ={'LC_ALL':'C','LANG':'C'},which=everything,run=fake_run(calls))
+    env = calls[0][1]['env']
+    assert 'LC_ALL' not in env and env['LC_CTYPE'] == 'UTF-8' and env['LANG'] == 'C'
+
+
 def test_windows_sends_utf16_to_the_system_clip_exe_never_a_path_lookup():
     calls = []
     system_clip = r'C:\Windows\System32\clip.exe'

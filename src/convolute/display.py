@@ -8,7 +8,7 @@ from . import __version__
 from .config import Settings
 from .pipeline import RunResult, Step
 from .terminal import (FRAME_SECONDS, FRAMES, LiveRegion, Painter, clip, detect_capabilities,
-                       spinner_frame, visible_width)
+                       printable, spinner_frame, visible_width)
 
 REVEAL_SECONDS = 1.0
 REVEAL_CHARS_PER_SECOND = 60
@@ -227,7 +227,7 @@ class LogDisplay(LiveDisplay):
             self._previous_chars = chars
             if not self._steps:
                 return
-            if is_revealable(step.text, self._region.columns()):
+            if is_revealable(printable(step.text), self._region.columns()):
                 self._typing = (step.target, step.text, self._clock())
             else:
                 self._region.print_above(self._text_lines(step.target, step.text))
@@ -236,7 +236,7 @@ class LogDisplay(LiveDisplay):
         paint, lines = self._painter, []
         if self._typing is not None:
             target, text, started = self._typing
-            lines.append(self._text_lines(target, text[:reveal_count(len(text), now - started)]))
+            lines.append(self._text_lines(target, printable(text[:reveal_count(len(text), now - started)])))
         if self._pending is not None:
             pass_number, step_number, source, target, started = self._pending
             tag = step_tag(self._settings, pass_number, step_number)
@@ -244,6 +244,12 @@ class LogDisplay(LiveDisplay):
                          f"{paint.lang(target, target)}  {paint.lang(target, spinner_frame(now))} "
                          f"{paint.dim(f'{now - started:.1f}s')}")
         return lines
+
+    def close(self) -> None:
+        # An interrupt can arrive while the last translation is still being typed: keep it.
+        with self._region.lock:
+            self._flush_typing()
+        super().close()
 
     def end(self, result: RunResult) -> None:
         with self._region.lock:
@@ -257,7 +263,7 @@ class LogDisplay(LiveDisplay):
 
 
 def preview(text: str) -> str:
-    return " ".join(text.split())
+    return " ".join(printable(text).split())
 
 
 def _rail(chain: Sequence[str], nodes: range, current: int, paint: Painter, phase: int, done: bool,
