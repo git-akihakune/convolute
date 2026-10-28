@@ -33,6 +33,53 @@ def test_real_request_and_prompt(server, mode):
     assert ('freer' in messages[0]['content']) == (mode == 'creative')
 
 
+@pytest.mark.parametrize('model', [
+    'translategemma', 'translategemma:latest', 'translategemma:4b',
+    'google/translategemma-4b-it',
+])
+def test_translategemma_sends_documented_prompt_in_one_user_message(server, model):
+    text = '¿Qué pasa? ¿Está usted bien?\n\n42  '
+    with TranslationClient(settings(server,model=model)) as client:
+        client.translate(text,'es','en')
+    body = server.requests[0]['body']
+    assert body['model'] == model
+    assert body['messages'] == [{'role':'user','content':(
+        'You are a professional Spanish (es) to English (en) translator. '
+        'Your goal is to accurately convey the meaning and nuances of the original Spanish text '
+        'while adhering to English grammar, vocabulary, and cultural sensitivities.\n'
+        'Produce only the English translation, without any additional explanations or commentary. '
+        'Please translate the following Spanish text into English:\n\n\n'
+        '¿Qué pasa? ¿Está usted bien?\n\n42  '
+    )}]
+
+
+@pytest.mark.parametrize('source,target,direction,instruction', [
+    ('en','fr','English (en) to French (fr)','following English text into French:'),
+    ('de','ja','German (de) to Japanese (ja)','following German text into Japanese:'),
+    ('en','zh','English (en) to Chinese (zh-Hans)','following English text into Chinese:'),
+    ('zh','en','Chinese (zh-Hans) to English (en)','following Chinese text into English:'),
+])
+def test_translategemma_uses_each_hops_language_names_and_codes(server,source,target,direction,instruction):
+    with TranslationClient(settings(server,model='translategemma:4b')) as client:
+        client.translate('text',source,target)
+    messages = server.requests[0]['body']['messages']
+    assert len(messages) == 1 and messages[0]['role'] == 'user'
+    assert messages[0]['content'].startswith(f'You are a professional {direction} translator.')
+    assert messages[0]['content'].endswith(f'{instruction}\n\n\ntext')
+
+
+def test_translategemma_creative_instructions_stay_before_the_input(server):
+    with TranslationClient(settings(server,model='translategemma:4b',mode='creative')) as client:
+        client.translate('¿Qué pasa?','es','en')
+    messages = server.requests[0]['body']['messages']
+    assert len(messages) == 1 and messages[0]['role'] == 'user'
+    instruction, text = messages[0]['content'].split('\n\n\n',1)
+    assert instruction.startswith('You are a professional Spanish (es) to English (en) translator.')
+    assert 'freer sentence structure' in instruction and 'negation' in instruction
+    assert instruction.endswith('Please translate the following Spanish text into English:')
+    assert text == '¿Qué pasa?'
+
+
 def test_custom_base_and_temperature_without_auth(server):
     with TranslationClient(settings(server,endpoint=server.endpoint+'/custom',temperature=0.7)) as client:
         assert client.translate('x','en','fr') == 'translated'

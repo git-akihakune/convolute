@@ -32,7 +32,13 @@ class FakeStream(io.StringIO):
 def fake_clipboard(tmp_path, exit_code=0):
     """Put a fake clipboard tool alone on PATH; returns the extra environment variables that select it."""
     tool = tmp_path / ('pbcopy' if sys.platform == 'darwin' else 'xclip')
-    tool.write_text(f'#!/bin/sh\n/bin/cat > "$CLIP_OUT"\nexit {exit_code}\n')
+    tool.write_text(
+        f'#!{sys.executable}\n'
+        'import os, sys\n'
+        'with open(os.environ["CLIP_OUT"], "wb") as output:\n'
+        '    output.write(sys.stdin.buffer.read())\n'
+        f'sys.exit({exit_code})\n'
+    )
     tool.chmod(0o755)
     return {'PATH':str(tmp_path),'CLIP_OUT':str(tmp_path/'clip.out')}
 

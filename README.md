@@ -110,6 +110,26 @@ enabled and redirects are not followed. Standard HTTP proxy/CA environment
 configuration is honored; ensure loopback hosts are covered by `NO_PROXY` if
 your environment uses a proxy.
 
+### TranslateGemma
+
+Convolute automatically selects [TranslateGemma's documented prompt format](https://ollama.com/library/translategemma)
+for models named `translategemma` (including tags such as `:latest` and `:4b`)
+or `translategemma-*`, with optional namespace prefixes such as `google/`.
+Each hop sends one user message containing the source/target language names and
+codes, translation instructions, two blank lines, and the unmodified input text.
+The chain's `zh` code is sent as `zh-Hans` (Simplified Chinese).
+
+Faithful mode uses the documented prompt verbatim. Creative mode adds rephrasing
+and fact-preservation instructions before the text separator; this extension's
+effect is model-dependent.
+
+```sh
+ollama pull translategemma:4b
+convolute --model translategemma:4b "What's the matter? You don't look so good?"
+```
+
+### Settings
+
 | Setting | CLI flag | Environment variable | Default |
 | --- | --- | --- | --- |
 | Endpoint | `--endpoint` | `CONVOLUTE_ENDPOINT` | `http://127.0.0.1:11434/v1` |

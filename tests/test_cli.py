@@ -26,7 +26,7 @@ def invoke(args, data=None, env=None):
 def test_help_and_version_do_not_contact_endpoint():
     result = invoke(['--help'])
     assert result.returncode == 0 and b'--preset' in result.stdout and b'--mode' in result.stdout
-    assert invoke(['--version']).stdout.strip() == b'convolute 0.1.1'
+    assert invoke(['--version']).stdout.strip() == b'convolute 0.1.2'
 
 
 def test_dry_run_has_default_chain_and_no_input_or_key(monkeypatch,capsys):
@@ -101,6 +101,26 @@ def test_default_run_and_json_auth_environment(server):
     assert b'PRIVATEKEY' not in result.stdout and b'PRIVATEKEY' not in result.stderr
     assert all(req['headers']['Authorization'] == 'Bearer PRIVATEKEY' for req in server.requests)
     assert all('freer' in req['body']['messages'][0]['content'] for req in server.requests)
+
+
+@pytest.mark.parametrize('flags', [[], ['--verbose','--show-steps']])
+def test_translategemma_default_chain_uses_single_user_prompts_in_every_display_mode(server,flags):
+    translations = ['French','German','Japanese','¿Qué pasa? ¿Está usted bien?','What is going on?']
+    server.responses.extend((200,completion(text),{}) for text in translations)
+    result = invoke(['--endpoint',server.endpoint,'--model','translategemma:latest',*flags,
+                     "What's the matter? You don't look so good?"])
+    assert result.returncode == 0 and result.stdout == b'What is going on?\n'
+    assert len(server.requests) == 5
+    for request, direction in zip(server.requests, [
+        'English (en) to French (fr)', 'French (fr) to German (de)',
+        'German (de) to Japanese (ja)', 'Japanese (ja) to Spanish (es)',
+        'Spanish (es) to English (en)',
+    ]):
+        messages = request['body']['messages']
+        assert len(messages) == 1 and messages[0]['role'] == 'user'
+        assert messages[0]['content'].startswith(f'You are a professional {direction} translator.')
+    assert server.requests[-1]['body']['messages'][0]['content'].endswith(
+        '\n\n\n¿Qué pasa? ¿Está usted bien?')
 
 
 def test_alias_chain_repeats_and_steps_on_stderr(server):
