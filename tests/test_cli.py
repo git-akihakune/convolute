@@ -26,7 +26,7 @@ def invoke(args, data=None, env=None):
 def test_help_and_version_do_not_contact_endpoint():
     result = invoke(['--help'])
     assert result.returncode == 0 and b'--preset' in result.stdout and b'--mode' in result.stdout
-    assert invoke(['--version']).stdout.strip() == b'convolute 0.1.0'
+    assert invoke(['--version']).stdout.strip() == b'convolute 0.1.1'
 
 
 def test_dry_run_has_default_chain_and_no_input_or_key(monkeypatch,capsys):
